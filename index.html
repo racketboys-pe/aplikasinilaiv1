@@ -482,7 +482,7 @@
                         <input type="text" id="input-tp-materi" placeholder="Contoh: Kebugaran Jasmani - Circuit Training" class="w-full text-xs border rounded-lg p-2.5">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-400 mb-1.5 uppercase">Deskripsi Kompetensi Dasar</label>
+                        <label class="block text-xs font-bold text-slate-400 mb-1.5 uppercase">Tujuan Pembelajaran</label>
                         <textarea id="input-tp-deskripsi" rows="3" class="w-full text-xs border rounded-lg p-2.5" placeholder="Siswa mampu menganalisis dan mempraktikkan aktivitas latihan kekuatan, kelenturan, dan daya tahan tubuh melalui circuit training dengan benar sesuai teknik dasar olahraga jasmani..."></textarea>
                     </div>
                     
@@ -663,7 +663,8 @@
                 </div>
 
                 <!-- KOTAK ANTARMUKA INPUT LAPANGAN CEPAT -->
-                <div id="wrapper-lapangan-interaktif" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Panel ini HANYA muncul setelah sesi diaktifkan -->
+                <div id="field-active-panel" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <!-- Sisi Kiri: Antarmuka Siswa Aktif & Tombol Besar -->
                     <div class="lg:col-span-2 bg-gradient-to-br from-slate-900 to-slate-950 text-white p-6 rounded-3xl shadow-xl flex flex-col justify-between min-h-[460px] relative overflow-hidden border border-slate-800">
                         <div class="absolute inset-0 opacity-5 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:20px_20px]"></div>
@@ -671,104 +672,98 @@
                         <div class="flex justify-between items-center border-b border-white/10 pb-4 z-10">
                             <div class="flex items-center gap-2">
                                 <span id="field-lbl-tipe-asesmen" class="text-[10px] font-extrabold bg-sports-600 text-white px-2.5 py-1 rounded-full uppercase tracking-wider">FORMATIF</span>
-                                <span id="field-lbl-warning-sumatif" class="hidden text-[10px] font-extrabold bg-amber-500 text-slate-950 px-2.5 py-1 rounded-full uppercase tracking-wider animate-pulse"><i class="fa-solid fa-triangle-exclamation"></i> Overwrite Aktif</span>
                             </div>
-                            <div class="text-xs font-mono text-slate-400">
-                                Antrean: <span id="field-lbl-index-siswa" class="text-yellow-300 font-bold">1</span>/<span id="field-lbl-total-siswa">0</span>
+                            <div class="flex items-center gap-3">
+                                <div class="text-xs font-mono text-slate-400">
+                                    Antrean: <span id="field-active-posisi" class="text-yellow-300 font-bold">1/0</span>
+                                </div>
+                                <button onclick="akhiriSesiLapangan()" class="text-[10px] text-red-400 hover:text-red-300 border border-red-800 hover:border-red-600 px-2.5 py-1 rounded-lg transition">
+                                    <i class="fa-solid fa-stop"></i> Akhiri
+                                </button>
                             </div>
                         </div>
 
                         <div class="text-center my-6 z-10 space-y-2">
-                            <span class="text-[10px] font-extrabold text-slate-400 tracking-widest uppercase block text-center">Siswa Fokus Lapangan</span>
-                            <h2 id="field-lbl-nama-siswa" class="text-2xl sm:text-4xl font-black text-yellow-300 tracking-wide drop-shadow-md uppercase text-center">NAMA SISWA LAPANGAN</h2>
-                            <p id="field-lbl-materi-tp" class="text-xs text-slate-300 max-w-lg mx-auto italic font-light text-center">"Menguasai materi kebugaran jasmani dengan baik..."</p>
+                            <span class="text-[10px] font-extrabold text-slate-400 tracking-widest uppercase block">Siswa Fokus Lapangan</span>
+                            <h2 id="field-active-nama" class="text-2xl sm:text-4xl font-black text-yellow-300 tracking-wide drop-shadow-md uppercase">—</h2>
+                            <p id="field-active-kelas" class="text-xs text-slate-400 font-light">—</p>
                         </div>
 
                         <!-- KONTEN INSTRUMEN DINAMIS -->
                         <div class="z-10 bg-white/5 border border-white/10 p-4 rounded-2xl space-y-3">
 
-                            <!-- INSTRUMEN RUBRIK: pilih level kriteria per indikator -->
+                            <!-- INSTRUMEN RUBRIK -->
                             <div id="instrumen-panel-skor-besar" class="block space-y-3">
                                 <span id="lbl-instruksi-skor" class="text-[10px] font-bold text-center text-slate-400 block uppercase tracking-wider">Pilih Level Kriteria untuk Setiap Indikator</span>
-                                <div id="rubrik-indikator-penilaian" class="space-y-3">
-                                    <!-- Diisi JS: tiap indikator dengan tombol kriteria 1/2/3/4 -->
-                                </div>
-                                <!-- Skor rata-rata otomatis -->
+                                <div id="rubrik-indikator-penilaian" class="space-y-3"></div>
                                 <div class="flex items-center justify-between bg-white/10 rounded-xl p-2.5 border border-white/10">
-                                    <span class="text-[10px] text-slate-300">Skor Rerata Indikator:</span>
+                                    <span class="text-[10px] text-slate-300">Skor Rerata:</span>
                                     <span id="rubrik-skor-rerata" class="text-lg font-black text-yellow-300">-</span>
                                 </div>
                                 <button onclick="simpanRubrikSesiSiswa()" class="w-full bg-sports-600 hover:bg-sports-700 text-white font-bold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2">
-                                    <i class="fa-solid fa-save"></i> Simpan Penilaian Rubrik
+                                    <i class="fa-solid fa-save"></i> Simpan → Siswa Berikutnya
                                 </button>
                             </div>
 
-                            <!-- INSTRUMEN CEKLIS: centang indikator yang tercapai -->
+                            <!-- INSTRUMEN CEKLIS -->
                             <div id="instrumen-panel-ceklis" class="hidden space-y-3">
-                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Ceklis Indikator yang Tercapai Siswa</span>
-                                <div id="ceklis-checklist-container" class="space-y-2 text-xs">
-                                    <!-- Dinamis -->
-                                </div>
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Ceklis Indikator yang Tercapai</span>
+                                <div id="ceklis-checklist-container" class="space-y-2 text-xs"></div>
                                 <div class="flex items-center justify-between bg-white/10 rounded-xl p-2.5 border border-white/10">
                                     <span class="text-[10px] text-slate-300">Tercapai:</span>
-                                    <span id="ceklis-progress-text" class="text-sm font-black text-yellow-300">0 / 0 indikator</span>
+                                    <span id="ceklis-progress-text" class="text-sm font-black text-yellow-300">0 / 0</span>
                                 </div>
-                                <button onclick="simpanCeklisAsesmenSiswa()" class="w-full bg-sports-600 hover:bg-sports-700 text-white font-bold py-3 rounded-xl text-xs transition">Simpan Hasil Ceklis</button>
+                                <button onclick="simpanCeklisAsesmenSiswa()" class="w-full bg-sports-600 hover:bg-sports-700 text-white font-bold py-3 rounded-xl text-xs transition">Simpan → Siswa Berikutnya</button>
                             </div>
 
-                            <!-- INSTRUMEN CATATAN ANEKDOTAL: ceklis + narasi -->
+                            <!-- INSTRUMEN ANEKDOTAL -->
                             <div id="instrumen-panel-anekdotal" class="hidden space-y-3">
                                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Indikator yang Ditunjukkan (Ceklis)</span>
-                                <div id="anekdotal-ceklis-container" class="space-y-2 text-xs">
-                                    <!-- Dinamis -->
-                                </div>
-                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mt-2">Catatan Narasi Perilaku Menonjol</span>
-                                <textarea id="input-anekdotal-deskripsi" rows="3" class="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white" placeholder="Deskripsikan perilaku fisik/kognitif menonjol siswa..."></textarea>
+                                <div id="anekdotal-ceklis-container" class="space-y-2 text-xs"></div>
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mt-2">Catatan Narasi</span>
+                                <textarea id="input-anekdotal-deskripsi" rows="3" class="w-full text-xs bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white" placeholder="Deskripsikan perilaku menonjol siswa..."></textarea>
                                 <div class="flex items-center gap-2">
-                                    <span class="text-xs text-slate-300 shrink-0">Skor Konversi:</span>
+                                    <span class="text-xs text-slate-300 shrink-0">Skor:</span>
                                     <select id="select-anekdotal-skor" class="bg-slate-900 text-xs border border-slate-700 rounded p-1.5 text-white flex-1">
-                                        <option value="1">Skor 1 (Bimbingan)</option>
-                                        <option value="2">Skor 2 (Cukup)</option>
-                                        <option value="3" selected>Skor 3 (Baik)</option>
-                                        <option value="4">Skor 4 (Sangat Baik)</option>
+                                        <option value="1">1 - Bimbingan</option>
+                                        <option value="2">2 - Cukup</option>
+                                        <option value="3" selected>3 - Baik</option>
+                                        <option value="4">4 - Sangat Baik</option>
                                     </select>
-                                    <button onclick="simpanAnekdotalSiswa()" class="bg-sports-600 hover:bg-sports-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shrink-0">Simpan</button>
+                                    <button onclick="simpanAnekdotalSiswa()" class="bg-sports-600 hover:bg-sports-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shrink-0">Simpan →</button>
                                 </div>
                             </div>
 
-                            <!-- INSTRUMEN TES SOAL (SKOR 0-100) -->
+                            <!-- INSTRUMEN TES SOAL -->
                             <div id="instrumen-panel-tes-soal" class="hidden space-y-3">
                                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Input Skor Tes Soal (0 – 100)</span>
-                                <div class="flex flex-col sm:flex-row items-start gap-4">
+                                <div class="flex flex-col sm:flex-row items-start gap-3">
                                     <div class="flex-1 w-full space-y-2">
                                         <input type="number" id="input-tes-soal-skor" min="0" max="100" placeholder="0 – 100"
                                             class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-4 text-white text-3xl font-black text-center focus:outline-none focus:ring-2 focus:ring-sports-400">
-                                        <p id="tes-soal-preview" class="text-[10px] text-slate-400 text-center">Masukkan skor untuk melihat konversi</p>
+                                        <p id="tes-soal-preview" class="text-[10px] text-slate-400 text-center">Masukkan skor</p>
                                     </div>
                                     <div class="bg-slate-800 border border-slate-700 rounded-xl p-3 text-[10px] space-y-1 shrink-0">
-                                        <span class="font-bold text-slate-300 block uppercase text-[9px]">Tabel Konversi</span>
-                                        <div class="flex gap-2"><span class="w-16 text-red-400 font-bold">0 – 54</span><span class="text-slate-400">→ Skor 1</span></div>
-                                        <div class="flex gap-2"><span class="w-16 text-amber-400 font-bold">55 – 69</span><span class="text-slate-400">→ Skor 2</span></div>
-                                        <div class="flex gap-2"><span class="w-16 text-blue-400 font-bold">70 – 84</span><span class="text-slate-400">→ Skor 3</span></div>
-                                        <div class="flex gap-2"><span class="w-16 text-emerald-400 font-bold">85 – 100</span><span class="text-slate-400">→ Skor 4</span></div>
+                                        <span class="font-bold text-slate-300 block text-[9px]">Konversi</span>
+                                        <div class="flex gap-2"><span class="w-14 text-red-400 font-bold">0–54</span><span class="text-slate-400">Skor 1</span></div>
+                                        <div class="flex gap-2"><span class="w-14 text-amber-400 font-bold">55–69</span><span class="text-slate-400">Skor 2</span></div>
+                                        <div class="flex gap-2"><span class="w-14 text-blue-400 font-bold">70–84</span><span class="text-slate-400">Skor 3</span></div>
+                                        <div class="flex gap-2"><span class="w-14 text-emerald-400 font-bold">85–100</span><span class="text-slate-400">Skor 4</span></div>
                                     </div>
                                 </div>
                                 <button onclick="simpanTesSoalSiswa()" class="w-full bg-sports-600 hover:bg-sports-700 text-white font-bold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2">
-                                    <i class="fa-solid fa-save"></i> Simpan Skor Tes
+                                    <i class="fa-solid fa-save"></i> Simpan → Siswa Berikutnya
                                 </button>
                             </div>
 
-                            <!-- INSTRUMEN GRAFIK KONTINUM: ceklis akumulatif lintas pertemuan -->
+                            <!-- INSTRUMEN GRAFIK KONTINUM -->
                             <div id="instrumen-panel-grafik-kontinum" class="hidden space-y-3">
-                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Grafik Kontinum Perkembangan (Ceklis Akumulatif)</span>
-                                <p class="text-[9px] text-slate-500 -mt-1">Indikator yang sudah tercapai di pertemuan sebelumnya ditampilkan, tambahkan yang baru tercapai hari ini. Semua tercapai = TUNTAS.</p>
-                                <div id="kontinum-checklist-container" class="space-y-2 text-xs">
-                                    <!-- Dinamis -->
-                                </div>
-                                <!-- Progress bar kontinum -->
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Grafik Kontinum (Ceklis Akumulatif)</span>
+                                <p class="text-[9px] text-slate-500">Indikator yang sudah tercapai di pertemuan sebelumnya otomatis tercentang.</p>
+                                <div id="kontinum-checklist-container" class="space-y-2 text-xs"></div>
                                 <div class="bg-slate-900 rounded-xl p-2 border border-slate-700">
                                     <div class="flex justify-between text-[10px] text-slate-400 mb-1">
-                                        <span>Progres Kontinum:</span>
+                                        <span>Progres:</span>
                                         <span id="kontinum-pct-text" class="font-bold text-emerald-400">0%</span>
                                     </div>
                                     <div class="w-full bg-slate-700 rounded-full h-2">
@@ -776,37 +771,37 @@
                                     </div>
                                 </div>
                                 <button onclick="simpanKontinumSiswa()" class="w-full bg-sports-600 hover:bg-sports-700 text-white font-bold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2">
-                                    <i class="fa-solid fa-chart-line"></i> Simpan Progres Kontinum
+                                    <i class="fa-solid fa-chart-line"></i> Simpan → Siswa Berikutnya
                                 </button>
                             </div>
 
                         </div>
 
                         <div class="flex justify-between items-center border-t border-white/10 pt-4 mt-4 text-xs z-10 text-slate-400">
-                            <button onclick="navigasiAntreanLapangan(-1)" class="hover:text-white transition"><i class="fa-solid fa-chevron-left mr-1"></i> Lewati Sebelum</button>
-                            <span class="text-[10px]">Autosave Aktif</span>
-                            <button onclick="navigasiAntreanLapangan(1)" class="hover:text-white transition">Lewati Sesudah <i class="fa-solid fa-chevron-right ml-1"></i></button>
+                            <button onclick="siswaLapanganSebelumnya()" class="hover:text-white transition"><i class="fa-solid fa-chevron-left mr-1"></i> Sebelumnya</button>
+                            <button onclick="lewatiSiswaLapangan()" class="text-amber-400 hover:text-amber-300 transition"><i class="fa-solid fa-forward mr-1"></i> Lewati</button>
+                            <button onclick="siswaLapanganBerikutnya()" class="hover:text-white transition">Berikutnya <i class="fa-solid fa-chevron-right ml-1"></i></button>
                         </div>
                     </div>
 
-                    <!-- Sisi Kanan: Panel Catatan & Riwayat -->
+                    <!-- Sisi Kanan: Panel Catatan & Log -->
                     <div class="space-y-6">
                         <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
                             <h3 class="font-extrabold text-slate-800 text-xs border-b pb-2 uppercase tracking-wider flex items-center gap-1.5"><i class="fa-solid fa-feather text-amber-500"></i> Catatan & Dokumentasi</h3>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Catatan Tambahan Lapangan</label>
-                                <input type="text" id="field-catatan-input" placeholder="Misal: Salah koordinasi kaki saat lari sirkuit" class="w-full text-xs border rounded-lg p-2.5 bg-slate-50">
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Catatan Tambahan</label>
+                                <input type="text" id="field-catatan-input" placeholder="Misal: koordinasi tangan-kaki belum sinkron" class="w-full text-xs border rounded-lg p-2.5 bg-slate-50">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Unggah URL Foto Lapangan</label>
-                                <input type="text" id="field-foto-input" placeholder="Masukkan URL gambar dokumentasi olahraga..." class="w-full text-xs border rounded-lg p-2.5 bg-slate-50 font-mono">
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">URL Foto Dokumentasi</label>
+                                <input type="text" id="field-foto-input" placeholder="https://..." class="w-full text-xs border rounded-lg p-2.5 bg-slate-50 font-mono">
                             </div>
                         </div>
 
                         <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-3">
                             <h3 class="font-extrabold text-slate-800 text-xs border-b pb-2 uppercase tracking-wider flex items-center gap-1.5"><i class="fa-solid fa-history text-blue-500"></i> Log Sesi Ini</h3>
-                            <div id="field-riwayat-sesi-wrapper" class="space-y-2 max-h-36 overflow-y-auto pr-1">
-                                <!-- JS Inject -->
+                            <div id="field-riwayat-sesi-wrapper" class="space-y-2 max-h-48 overflow-y-auto pr-1 text-xs text-slate-500 italic">
+                                Belum ada entri sesi ini.
                             </div>
                         </div>
                     </div>
@@ -1332,8 +1327,8 @@
             // Coba tarik data user dari GAS jika URL tersimpan
             setLoadingStatus("Mengecek koneksi database...");
             // ▼▼▼ ATAU hardcode URL di sini untuk langsung aktif tanpa pengaturan ▼▼▼
-            const STARTUP_GAS_URL = "https://script.google.com/macros/s/AKfycbxnHYXM1KOh7ZDrQTlgVg852pwZcZCuMMCU8Pmz9CaYdAHN0ncbr1PcW3LhlWAXpxrRtw/exec";
-            // ▲▲▲ GANTI "" dengan URL Web App Anda ▲▲▲
+            const STARTUP_GAS_URL = "";
+            // ▲▲▲ GANTI "https://script.google.com/macros/s/AKfycbxnHYXM1KOh7ZDrQTlgVg852pwZcZCuMMCU8Pmz9CaYdAHN0ncbr1PcW3LhlWAXpxrRtw/exec" dengan URL Web App Anda ▲▲▲
             let savedUrl = STARTUP_GAS_URL || localStorage.getItem('pjok_global_gasUrl') || "";
             if (savedUrl) {
                 if (STARTUP_GAS_URL) localStorage.setItem('pjok_global_gasUrl', STARTUP_GAS_URL);
@@ -1712,7 +1707,7 @@
                 return {
                     kode: r["Kode TP"] || "",
                     materi: r["Materi Pokok"] || "",
-                    deskripsi: r["Deskripsi Kompetensi"] || "",
+                    deskripsi: r["Tujuan Pembelajaran"] || "",
                     kktp: (r["KKTP Lama (pisahkan |)"] || "").split("|").filter(Boolean),
                     indikatorRubrik: indikatorRubrik
                 };
@@ -2357,7 +2352,176 @@
         let sesiIndikatorRubrik = []; // [{nama, k1, k2, k3, k4, skorDipilih}]
         let sesiIndikatorCeklis = []; // [{nama, tercapai}]
 
+        // ===== SESI INPUT LAPANGAN AKTIF =====
+        // Tampilan siswa aktif (panel kanan di lapangan)
+        let sesiKelasAktif = "";
+        let sesiTPAktif = "";
+        let sesiTipeAsesmenAktif = "Formatif";
+        let sesiTeknikAktif = "Observasi";
+
+        function bukaSesiLapanganAktif() {
+            let kelasEl = document.getElementById('field-pilih-kelas');
+            let tpEl    = document.getElementById('field-pilih-tp');
+            let tipeEl  = document.getElementById('field-pilih-tipe');
+            let teknikEl= document.getElementById('field-pilih-teknik');
+            let instrEl = document.getElementById('field-pilih-instrumen');
+
+            if (!kelasEl || !kelasEl.value) { alert("Pilih kelas terlebih dahulu."); return; }
+            if (!tpEl || !tpEl.value)       { alert("Pilih Tujuan Pembelajaran terlebih dahulu."); return; }
+
+            sesiKelasAktif = kelasEl.value;
+            sesiTPAktif    = tpEl.value;
+            sesiTipeAsesmenAktif = tipeEl ? tipeEl.value : "Formatif";
+            sesiTeknikAktif      = teknikEl ? teknikEl.value : "Observasi";
+
+            // Muat daftar siswa sesuai kelas ke antrian sesi
+            activeSesiSiswa = dbSiswa.filter(s => s.kelas === sesiKelasAktif);
+            activeSesiIndex = 0;
+
+            if (activeSesiSiswa.length === 0) {
+                alert("Tidak ada siswa terdaftar di kelas " + sesiKelasAktif + ". Tambahkan siswa terlebih dahulu di menu Data Siswa.");
+                return;
+            }
+
+            // Siapkan indikator KKTP sesuai instrumen
+            updateKKTPDisplayInField();
+
+            // Tampilkan area sesi aktif, sembunyikan panel setup
+            let setupPanel = document.getElementById('field-setup-panel');
+            let activePanel = document.getElementById('field-active-panel');
+            if (setupPanel) setupPanel.classList.add('hidden');
+            if (activePanel) activePanel.classList.remove('hidden');
+
+            tampilkanSiswaLapanganAktif();
+        }
+
+        function tampilkanSiswaLapanganAktif() {
+            if (activeSesiSiswa.length === 0) return;
+            let siswa = activeSesiSiswa[activeSesiIndex];
+            let total = activeSesiSiswa.length;
+
+            // Update nama dan posisi
+            let namaEl   = document.getElementById('field-active-nama');
+            let posEl    = document.getElementById('field-active-posisi');
+            let kelasEl2 = document.getElementById('field-active-kelas');
+            if (namaEl)   namaEl.innerText   = siswa.nama;
+            if (posEl)    posEl.innerText    = `${activeSesiIndex + 1} / ${total}`;
+            if (kelasEl2) kelasEl2.innerText = siswa.kelas;
+
+            // Reset catatan dan foto
+            let catEl  = document.getElementById('field-catatan-input');
+            let fotoEl = document.getElementById('field-foto-input');
+            if (catEl)  catEl.value  = "";
+            if (fotoEl) fotoEl.value = "";
+
+            // Reset skor indikator untuk siswa baru
+            sesiIndikatorRubrik.forEach(i => i.skorDipilih = null);
+            sesiIndikatorCeklis.forEach(i => i.tercapai = false);
+
+            // Render panel instrumen sesuai yang dipilih
+            let instrumen = document.getElementById('field-pilih-instrumen') ? document.getElementById('field-pilih-instrumen').value : "Rubrik";
+            gantiFormatInstrumenField();
+        }
+
+        function siswaLapanganBerikutnya() {
+            if (activeSesiIndex < activeSesiSiswa.length - 1) {
+                activeSesiIndex++;
+                tampilkanSiswaLapanganAktif();
+            } else {
+                // Sesi selesai
+                let setupPanel  = document.getElementById('field-setup-panel');
+                let activePanel = document.getElementById('field-active-panel');
+                if (setupPanel)  setupPanel.classList.remove('hidden');
+                if (activePanel) activePanel.classList.add('hidden');
+                customAlert("✓ Sesi penilaian selesai! Semua " + activeSesiSiswa.length + " siswa telah dinilai.");
+                activeSesiSiswa = [];
+                activeSesiIndex = 0;
+            }
+        }
+
+        function siswaLapanganSebelumnya() {
+            if (activeSesiIndex > 0) {
+                activeSesiIndex--;
+                tampilkanSiswaLapanganAktif();
+            }
+        }
+
+        function akhiriSesiLapangan() {
+            let setupPanel  = document.getElementById('field-setup-panel');
+            let activePanel = document.getElementById('field-active-panel');
+            if (setupPanel)  setupPanel.classList.remove('hidden');
+            if (activePanel) activePanel.classList.add('hidden');
+            activeSesiSiswa = [];
+            activeSesiIndex = 0;
+            customAlert("Sesi penilaian diakhiri.");
+        }
+
+        function simpanEntriPenilaianLapangan(skor, catatan, fotoUrl) {
+            if (activeSesiSiswa.length === 0) { alert("Tidak ada sesi aktif."); return; }
+            let siswa = activeSesiSiswa[activeSesiIndex];
+            let instrumen = document.getElementById('field-pilih-instrumen') ? document.getElementById('field-pilih-instrumen').value : "Rubrik";
+            let timestamp = new Date().toLocaleString('id-ID');
+
+            let entri = {
+                siswaId:          siswa.id,
+                nama:             siswa.nama,
+                kelas:            siswa.kelas,
+                tpKode:           sesiTPAktif,
+                tipeAsesmen:      sesiTipeAsesmenAktif,
+                teknikPenilaian:  sesiTeknikAktif,
+                instrumenAsesmen: instrumen,
+                skor:             skor,
+                catatan:          catatan || "",
+                fotoUrl:          fotoUrl || "",
+                timestamp:        timestamp
+            };
+
+            dbPenilaian.push(entri);
+            simpanSemuaKeLokal();
+            hitungKalkulasiDashboard();
+
+            // Kirim ke GAS jika terhubung
+            kirimDataLokalKeGoogleSheets({ action: 'simpanPenilaian', userEmail: currentUser.email, ...entri });
+
+            // Tambah ke log riwayat sesi
+            let logEl = document.getElementById('field-riwayat-sesi-wrapper');
+            if (logEl) {
+                let instrumen = entri.instrumenAsesmen;
+                let warna = skor >= 3 ? 'text-emerald-600' : 'text-amber-600';
+                logEl.innerHTML = `<div class="text-xs p-2 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
+                    <span class="font-semibold text-slate-700 truncate">${siswa.nama}</span>
+                    <span class="font-black ${warna} shrink-0 ml-2">${skor} (${instrumen})</span>
+                </div>` + logEl.innerHTML;
+                if (logEl.innerHTML.includes('Belum ada')) logEl.innerHTML = logEl.innerHTML.replace('Belum ada entri sesi ini.', '');
+            }
+
+            // Otomatis geser ke siswa berikutnya
+            siswaLapanganBerikutnya();
+        }
+
+        function lewatiSiswaLapangan() {
+            siswaLapanganBerikutnya();
+        }
+
+        function setupCeklisSiswaAktif() {
+            let container = document.getElementById('ceklis-checklist-container');
+            if (!container) return;
+            container.innerHTML = "";
+            if (sesiIndikatorCeklis.length === 0) {
+                container.innerHTML = '<p class="text-slate-400 text-xs italic">Tidak ada indikator. Tambahkan di panel KKTP di atas.</p>'; return;
+            }
+            sesiIndikatorCeklis.forEach((ind, idx) => {
+                container.innerHTML += `
+                    <div class="flex items-center gap-2 bg-white/5 p-2 rounded-lg cursor-pointer hover:bg-white/10 transition" onclick="toggleCeklisLapangan(${idx})">
+                        <input type="checkbox" id="lapangan-ceklis-${idx}" ${ind.tercapai?'checked':''} class="accent-emerald-400 h-4 w-4 shrink-0">
+                        <label for="lapangan-ceklis-${idx}" class="text-xs text-slate-300 cursor-pointer select-none">${ind.nama}</label>
+                    </div>`;
+            });
+            updateCeklisProgress();
+        }
+
         function updateKKTPDisplayInField() {
+
             let tpKode = document.getElementById('field-pilih-tp') ? document.getElementById('field-pilih-tp').value : "";
             let instrumen = document.getElementById('field-pilih-instrumen') ? document.getElementById('field-pilih-instrumen').value : "Rubrik";
             let targetTP = dbTP.find(t => t.kode === tpKode);
