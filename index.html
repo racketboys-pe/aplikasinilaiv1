@@ -1268,6 +1268,14 @@
                                 </button>
                             </div>
                             <span id="db-last-sync" class="text-[10px] text-slate-400 italic hidden block"></span>
+                            <!-- Panel debug: tampilkan respons mentah dari GAS -->
+                            <div class="bg-slate-900 rounded-xl p-3 text-[10px] font-mono space-y-1.5">
+                                <p class="text-slate-400 font-bold uppercase text-[9px]">Debug Panel — Respons Terakhir dari GAS:</p>
+                                <pre id="gas-debug-output" class="text-emerald-400 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">Belum ada permintaan dikirim.</pre>
+                                <button onclick="debugTesRegistrasi()" class="mt-1 w-full bg-purple-700 hover:bg-purple-600 text-white py-1.5 rounded-lg text-[10px] font-bold">
+                                    🔧 Tes Kirim Data (Registrasi Dummy) ke GAS
+                                </button>
+                            </div>
                         </div>
                         <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-1.5 text-[10px] text-blue-700 self-start">
                             <p class="font-extrabold uppercase text-[9px] tracking-wider text-blue-500">Cara Menghubungkan Database:</p>
@@ -1327,8 +1335,8 @@
             // Coba tarik data user dari GAS jika URL tersimpan
             setLoadingStatus("Mengecek koneksi database...");
             // ▼▼▼ ATAU hardcode URL di sini untuk langsung aktif tanpa pengaturan ▼▼▼
-            const STARTUP_GAS_URL = "";
-            // ▲▲▲ GANTI "https://script.google.com/macros/s/AKfycbxnHYXM1KOh7ZDrQTlgVg852pwZcZCuMMCU8Pmz9CaYdAHN0ncbr1PcW3LhlWAXpxrRtw/exec" dengan URL Web App Anda ▲▲▲
+            const STARTUP_GAS_URL = "https://script.google.com/macros/s/AKfycbxnHYXM1KOh7ZDrQTlgVg852pwZcZCuMMCU8Pmz9CaYdAHN0ncbr1PcW3LhlWAXpxrRtw/exec";
+            // ▲▲▲ GANTI "" dengan URL Web App Anda ▲▲▲
             let savedUrl = STARTUP_GAS_URL || localStorage.getItem('pjok_global_gasUrl') || "";
             if (savedUrl) {
                 if (STARTUP_GAS_URL) localStorage.setItem('pjok_global_gasUrl', STARTUP_GAS_URL);
@@ -1361,27 +1369,45 @@
             return (el ? el.value.trim() : "") || localStorage.getItem('pjok_global_gasUrl') || "";
         }
 
-        async function gasPost(payload) {
+        // ============================================================
+        // gasCall: SATU-SATUNYA fungsi komunikasi ke GAS
+        // Semua request dikirim via GET dengan payload JSON di URL
+        // Ini WAJIB karena GAS Web App tidak bisa baca POST body
+        // saat Content-Type: application/json (CORS preflight block)
+        // ============================================================
+        async function gasCall(action, data) {
             let url = getGasUrl();
             if (!url) return null;
             try {
-                let res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                return await res.json();
-            } catch(e) { return null; }
+                // Encode semua data sebagai JSON di parameter payload
+                let payload = JSON.stringify({ action: action, ...data });
+                let qs = "action=" + encodeURIComponent(action) +
+                         "&payload=" + encodeURIComponent(payload);
+                // Untuk data kecil: kirim langsung
+                // GAS baca via: e.parameter.action dan JSON.parse(decodeURIComponent(e.parameter.payload))
+                let res = await fetch(url + "?" + qs, { method: "GET" });
+                let text = await res.text();
+                try { return JSON.parse(text); }
+                catch(e) { console.error("GAS response bukan JSON:", text); return null; }
+            } catch(e) {
+                console.error("gasCall error:", action, e);
+                return null;
+            }
+        }
+
+        // Alias agar kode lama yang panggil gasPost/gasGet tetap jalan
+        async function gasPost(payload) {
+            let action = payload.action || "unknown";
+            let data = { ...payload };
+            delete data.action;
+            return await gasCall(action, data);
         }
 
         async function gasGet(params) {
-            let url = getGasUrl();
-            if (!url) return null;
-            try {
-                let qs = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
-                let res = await fetch(url + '?' + qs, { method: 'GET' });
-                return await res.json();
-            } catch(e) { return null; }
+            let action = params.action || "unknown";
+            let data = { ...params };
+            delete data.action;
+            return await gasCall(action, data);
         }
 
         async function tarikDataUserDariGAS(url) {
@@ -1398,7 +1424,8 @@
                 setLoadingStatus("Database aktif. Memuat daftar akun...");
 
                 // Ambil daftar user dari DB
-                let res = await fetch(url + "?action=getUsers", { method: 'GET' });
+                let payload = encodeURIComponent(JSON.stringify({ action: 'getUsers' }));
+                let res = await fetch(url + "?action=getUsers&payload=" + payload, { method: 'GET' });
                 let data = await res.json();
                 if (data.status === "success" && Array.isArray(data.users) && data.users.length > 0) {
                     // DB adalah sumber kebenaran — override lokal
@@ -1504,24 +1531,34 @@
 
             // Kirim ke database GAS jika terhubung
             if (dbTerhubung && getGasUrl()) {
-                let result = await gasPost({ action: 'registerUser', ...newUser });
-                if (result && result.status === 'error') {
+                customAlert("Mendaftarkan akun ke database...");
+                let result = await gasCall('registerUser', newUser);
+                if (!result) {
+                    // Koneksi gagal total — simpan lokal saja
+                    customAlert("⚠️ Database tidak merespons. Akun disimpan lokal.");
+                    presetUsers.push(newUser);
+                    localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
+                } else if (result.status === 'error') {
                     if (btnReg) { btnReg.disabled = false; btnReg.innerHTML = '<i class="fa-solid fa-user-plus"></i> Daftar Akun & Masuk'; }
                     alert("Gagal daftar ke database: " + result.message); return;
-                }
-                // Refresh daftar user dari DB agar sinkron
-                let usersRes = await gasGet({ action: 'getUsers' });
-                if (usersRes && usersRes.status === 'success' && usersRes.users) {
-                    presetUsers = usersRes.users;
-                    localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
-                    // Pastikan user baru ada (DB mungkin update id)
-                    let dbUser = presetUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-                    if (dbUser) newUser = dbUser;
+                } else {
+                    // Berhasil — pakai id dari DB jika berbeda
+                    if (result.id) newUser.id = result.id;
+                    customAlert("✓ Akun terdaftar di database!");
+                    // Refresh daftar user dari DB agar sinkron
+                    let usersRes = await gasCall('getUsers', {});
+                    if (usersRes && usersRes.status === 'success' && Array.isArray(usersRes.users)) {
+                        presetUsers = usersRes.users;
+                        localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
+                        let dbUser = presetUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+                        if (dbUser) newUser = dbUser;
+                    }
                 }
             } else {
                 // Mode lokal: simpan hanya di localStorage
                 presetUsers.push(newUser);
                 localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
+                customAlert("Akun disimpan lokal (database belum terhubung).");
             }
 
             if (btnReg) { btnReg.disabled = false; btnReg.innerHTML = '<i class="fa-solid fa-user-plus"></i> Daftar Akun & Masuk'; }
@@ -1571,7 +1608,7 @@
             if (dbTerhubung && getGasUrl()) {
                 try {
                     // Ambil ulang daftar user terbaru dari DB
-                    let usersRes = await gasGet({ action: 'getUsers' });
+                    let usersRes = await gasCall('getUsers', {});
                     if (usersRes && usersRes.status === 'success' && Array.isArray(usersRes.users)) {
                         presetUsers = usersRes.users;
                         localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
@@ -1650,7 +1687,7 @@
             if (dbTerhubung && getGasUrl()) {
                 try {
                     setLoadingStatus("Memuat data dari database...");
-                    let res = await gasGet({ action: 'getUserData', email: email });
+                    let res = await gasCall('getUserData', { email: email });
                     if (res && res.status === 'success') {
                         // Parse data dari GAS ke format internal
                         dbSiswa     = parseSiswaFromGAS(res.siswa || []);
@@ -1765,25 +1802,88 @@
             localStorage.setItem(`pjok_${uid}_rtl`,       JSON.stringify(dbRTL));
         }
 
-        // Sinkron semua data user ke DB GAS (dipanggil setelah perubahan besar)
+        // Sinkron semua data user ke DB GAS
+        // Data dikirim per-bagian agar URL tidak terlalu panjang
         async function sinkronDataKeDB() {
             if (!dbTerhubung || !getGasUrl() || !currentUser) return;
-            try {
-                let result = await gasPost({
-                    action: 'syncUserData',
-                    email: currentUser.email,
-                    siswa: dbSiswa,
-                    kelas: dbKelas.map(k => ({ namaKelas: k })),
-                    tp: dbTP,
-                    penilaian: dbPenilaian,
-                    presensi: dbPresensi,
-                    rtl: dbRTL
-                });
-                if (result && result.status === 'success') {
-                    let syncEl = document.getElementById('db-last-sync');
-                    if (syncEl) { syncEl.classList.remove('hidden'); syncEl.innerText = "Terakhir sinkron: " + new Date().toLocaleString('id-ID'); }
+            let email = currentUser.email;
+            let ts = new Date().toLocaleString('id-ID');
+            let errors = [];
+
+            // Helper: kirim satu bagian data, retry 1x jika gagal
+            async function kirimBagian(action, dataObj) {
+                let res = await gasCall(action, { ...dataObj, userEmail: email });
+                if (!res || res.status === 'error') {
+                    // Retry sekali
+                    await new Promise(r => setTimeout(r, 800));
+                    res = await gasCall(action, { ...dataObj, userEmail: email });
                 }
-            } catch(e) { /* sinkron gagal, data masih tersimpan lokal */ }
+                if (!res || res.status === 'error') errors.push(action);
+                return res;
+            }
+
+            try {
+                // 1. Sinkron daftar kelas
+                for (let k of dbKelas) {
+                    await kirimBagian('simpanKelas', { namaKelas: k });
+                }
+
+                // 2. Sinkron daftar siswa (hapus dulu semua milik user ini via syncUserData minimal)
+                // Kirim sync siswa+kelas+tp sekaligus (data lebih kecil per field)
+                let syncPayload = {
+                    email: email,
+                    siswa: JSON.stringify(dbSiswa),
+                    kelas: JSON.stringify(dbKelas.map(k => ({ namaKelas: k }))),
+                    tp:    JSON.stringify(dbTP)
+                };
+                let r1 = await gasCall('syncUserData', syncPayload);
+                if (!r1 || r1.status === 'error') errors.push('syncStruktur');
+
+                // 3. Sinkron presensi
+                if (dbPresensi.length > 0) {
+                    let r2 = await gasCall('syncUserData', {
+                        email: email,
+                        presensi: JSON.stringify(dbPresensi),
+                        siswa: '[]', kelas: '[]', tp: '[]', rtl: '[]', penilaian: '[]'
+                    });
+                    if (!r2 || r2.status === 'error') errors.push('syncPresensi');
+                }
+
+                // 4. Sinkron RTL
+                if (dbRTL.length > 0) {
+                    let r3 = await gasCall('syncUserData', {
+                        email: email,
+                        rtl: JSON.stringify(dbRTL),
+                        siswa: '[]', kelas: '[]', tp: '[]', presensi: '[]', penilaian: '[]'
+                    });
+                    if (!r3 || r3.status === 'error') errors.push('syncRTL');
+                }
+
+                // 5. Sinkron penilaian (append only, per 10 item agar URL tidak overload)
+                let chunkSize = 10;
+                for (let i = 0; i < dbPenilaian.length; i += chunkSize) {
+                    let chunk = dbPenilaian.slice(i, i + chunkSize);
+                    let r4 = await gasCall('syncUserData', {
+                        email: email,
+                        penilaian: JSON.stringify(chunk),
+                        siswa: '[]', kelas: '[]', tp: '[]', presensi: '[]', rtl: '[]'
+                    });
+                    if (!r4 || r4.status === 'error') errors.push('syncPenilaian_' + i);
+                }
+
+                let syncEl = document.getElementById('db-last-sync');
+                if (errors.length === 0) {
+                    if (syncEl) { syncEl.classList.remove('hidden'); syncEl.innerText = "Terakhir sinkron: " + ts; }
+                    return true;
+                } else {
+                    console.warn("Sinkron sebagian gagal:", errors);
+                    if (syncEl) { syncEl.classList.remove('hidden'); syncEl.innerText = "Sinkron parsial: " + ts; }
+                    return false;
+                }
+            } catch(e) {
+                console.error("sinkronDataKeDB error:", e);
+                return false;
+            }
         }
 
         // ================= PENGONTROL TAB NAVIGASI UTAMA =================
@@ -3341,7 +3441,7 @@
 
                 // Update profil ke DB jika terhubung
                 if (dbTerhubung && getGasUrl()) {
-                    await gasPost({ action: 'updateUser', ...currentUser });
+                    await gasCall('updateUser', currentUser);
                 }
 
                 updateInstansiAesthetics();
@@ -3374,12 +3474,18 @@
             testKoneksiGAS(false);
         }
 
+        function setDebugOutput(text) {
+            let el = document.getElementById('gas-debug-output');
+            if (el) el.innerText = text;
+        }
+
         function testKoneksiGAS(silent = false) {
             let urlEl = document.getElementById('api-gas-url');
             let url = urlEl ? urlEl.value.trim() : "";
 
             if (!url) {
                 updateStatusPill(false, "Tidak Terhubung (Mode Lokal)");
+                setDebugOutput("URL belum diisi.");
                 return;
             }
 
@@ -3387,26 +3493,80 @@
             let pill = document.getElementById('cloud-status-pill');
             if (pill) { pill.className = "px-2.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-bold text-[10px] flex items-center gap-1"; pill.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> Menghubungkan...`; }
 
-            fetch(url + "?action=ping", { method: 'GET' })
-                .then(res => res.json())
-                .then(data => {
+            let pingUrl = url + "?action=ping&payload=" + encodeURIComponent(JSON.stringify({action:"ping"}));
+            setDebugOutput("Mengirim ping ke:
+" + pingUrl);
+
+            fetch(pingUrl, { method: 'GET' })
+                .then(res => res.text())
+                .then(rawText => {
+                    setDebugOutput("Respons mentah GAS:
+" + rawText);
+                    let data;
+                    try { data = JSON.parse(rawText); } catch(e) {
+                        updateStatusPill(false, "Respons tidak valid");
+                        if (!silent) alert("GAS mengembalikan respons yang tidak bisa dibaca. Cek deployment.
+
+" + rawText.slice(0,300));
+                        return;
+                    }
                     if (data.status === "connected" || data.status === "success") {
+                        dbTerhubung = true;
                         updateStatusPill(true, "Terhubung ke Database");
-                        if (!silent) customAlert("Database Google Sheets Terhubung!");
-                    } else { throw new Error(); }
+                        if (!silent) customAlert("✓ Database Google Sheets Terhubung!");
+                    } else {
+                        updateStatusPill(false, "GAS Error: " + (data.message || "unknown"));
+                        if (!silent) alert("GAS merespons tapi dengan error: " + JSON.stringify(data));
+                    }
                 })
-                .catch(() => {
+                .catch(err => {
+                    setDebugOutput("Fetch gagal: " + err.toString() + "
+
+URL: " + pingUrl);
                     updateStatusPill(false, "Gagal Tersambung");
-                    if (!silent) alert("Gagal menyambung. Cek kembali Web App GAS URL Anda.");
+                    if (!silent) alert("Tidak bisa menjangkau URL GAS.
+Cek: URL benar? Deployment 'Anyone'?
+
+Error: " + err.toString());
                 });
         }
 
-        // Kirim satu payload real-time ke GAS (penilaian, presensi, RTL individual)
+        // Debug: kirim data dummy ke GAS dan tampilkan hasilnya
+        async function debugTesRegistrasi() {
+            let url = getGasUrl();
+            if (!url) { alert("Isi URL GAS terlebih dahulu."); return; }
+            setDebugOutput("Mengirim data test ke GAS...");
+            let testData = {
+                id: "test_" + Date.now(),
+                email: "test@debug.pjok",
+                name: "Tes Debug",
+                pass: "test123",
+                appTitle: "Sekolah Test",
+                alamat: "", logoUrl: "", tutWuriUrl: ""
+            };
+            let result = await gasCall('registerUser', testData);
+            setDebugOutput("Respons registerUser:
+" + JSON.stringify(result, null, 2));
+            if (result && result.status === 'success') {
+                customAlert("✓ Data berhasil masuk ke spreadsheet! Cek sheet DataPengguna.");
+            } else if (result && result.status === 'error') {
+                customAlert("GAS merespons dengan error: " + result.message);
+            } else {
+                alert("Tidak ada respons dari GAS. Cek:
+1. URL benar?
+2. Deploy sebagai Web App dengan akses Anyone?
+3. Sudah klik Deploy (bukan hanya Save)?");
+            }
+        }
+
+        // Kirim satu entri real-time ke GAS (penilaian, presensi, RTL individual)
         function kirimDataLokalKeGoogleSheets(payload) {
             if (!dbTerhubung || !getGasUrl()) return;
-            // Pastikan action ada di payload
-            if (!payload.action) return;
-            gasPost(payload).then(res => {
+            let action = payload.action;
+            if (!action) return;
+            let data = { ...payload };
+            delete data.action;
+            gasCall(action, data).then(res => {
                 if (res && res.status === 'success') {
                     let syncEl = document.getElementById('db-last-sync');
                     if (syncEl) { syncEl.classList.remove('hidden'); syncEl.innerText = "Terakhir sinkron: " + new Date().toLocaleString('id-ID'); }
