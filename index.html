@@ -1326,7 +1326,7 @@
             // Coba tarik data user dari GAS jika URL tersimpan
             setLoadingStatus("Mengecek koneksi database...");
             // ▼▼▼ ATAU hardcode URL di sini untuk langsung aktif tanpa pengaturan ▼▼▼
-            const STARTUP_GAS_URL = "";
+            const STARTUP_GAS_URL = "https://script.google.com/macros/s/AKfycbxnHYXM1KOh7ZDrQTlgVg852pwZcZCuMMCU8Pmz9CaYdAHN0ncbr1PcW3LhlWAXpxrRtw/exec";
             // ▲▲▲ GANTI "" dengan URL Web App Anda ▲▲▲
             let savedUrl = STARTUP_GAS_URL || localStorage.getItem('pjok_global_gasUrl') || "";
             if (savedUrl) {
