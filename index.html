@@ -268,12 +268,18 @@
             <div id="db-status-bar" class="flex items-center justify-between bg-white border border-slate-100 rounded-2xl px-4 py-2.5 shadow-sm no-print">
                 <div class="flex items-center gap-2 text-xs text-slate-600">
                     <i class="fa-solid fa-database text-slate-400"></i>
-                    <span class="font-semibold">Status Database:</span>
+                    <span class="font-semibold hidden sm:inline">Status Database:</span>
                     <span id="cloud-status-pill" class="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10px] flex items-center gap-1">
                         <i class="fa-solid fa-circle-xmark"></i> Tidak Terhubung
                     </span>
                 </div>
-                <span id="db-last-sync" class="text-[10px] text-slate-400 italic hidden">Terakhir sinkron: -</span>
+                <div class="flex items-center gap-2">
+                    <span id="db-last-sync" class="text-[10px] text-slate-400 italic hidden">Terakhir sinkron: -</span>
+                    <button onclick="sinkronManual()" id="btn-sinkron-manual" title="Sinkron semua data ke database"
+                        class="hidden text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1 transition">
+                        <i class="fa-solid fa-rotate"></i> <span class="hidden sm:inline">Sinkron</span>
+                    </button>
+                </div>
             </div>
 
             <!-- ================= TAB 1: DASHBOARD ================= -->
@@ -1351,33 +1357,72 @@
             if (el) el.innerText = teks;
         }
 
+        // Flag apakah database berhasil terhubung
+        let dbTerhubung = false;
+        let gasUrl = ""; // URL GAS aktif (dibaca sekali, dipakai di mana saja)
+
+        function getGasUrl() {
+            let el = document.getElementById('api-gas-url');
+            return (el ? el.value.trim() : "") || localStorage.getItem('pjok_global_gasUrl') || "";
+        }
+
+        async function gasPost(payload) {
+            let url = getGasUrl();
+            if (!url) return null;
+            try {
+                let res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                return await res.json();
+            } catch(e) { return null; }
+        }
+
+        async function gasGet(params) {
+            let url = getGasUrl();
+            if (!url) return null;
+            try {
+                let qs = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+                let res = await fetch(url + '?' + qs, { method: 'GET' });
+                return await res.json();
+            } catch(e) { return null; }
+        }
+
         async function tarikDataUserDariGAS(url) {
             try {
-                setLoadingStatus("Menarik daftar pengguna dari database...");
+                setLoadingStatus("Menghubungkan ke database...");
+                // Ping dulu
+                let ping = await fetch(url + "?action=ping", { method: 'GET' });
+                let pingData = await ping.json();
+                if (pingData.status !== "connected" && pingData.status !== "success") throw new Error("ping gagal");
+
+                dbTerhubung = true;
+                gasUrl = url;
+                updateStatusPill(true, "Terhubung ke Database");
+                setLoadingStatus("Database aktif. Memuat daftar akun...");
+
+                // Ambil daftar user dari DB
                 let res = await fetch(url + "?action=getUsers", { method: 'GET' });
                 let data = await res.json();
                 if (data.status === "success" && Array.isArray(data.users) && data.users.length > 0) {
-                    // Merge dengan lokal: user lokal tetap ada, tambah dari GAS yang belum ada
-                    data.users.forEach(u => {
-                        if (!presetUsers.find(p => p.email === u.email)) {
-                            presetUsers.push(u);
-                        }
-                    });
+                    // DB adalah sumber kebenaran — override lokal
+                    presetUsers = data.users;
                     localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
                     bukaPresetLoginDropdown();
                     gantiPresetLogin();
-                    setLoadingStatus("Data pengguna berhasil dimuat dari database.");
-                    updateStatusPill(true, "Terhubung ke Database");
-                } else if (data.status === "connected") {
-                    updateStatusPill(true, "Terhubung ke Database");
-                    setLoadingStatus("Database aktif. Siap digunakan.");
+                    setLoadingStatus(`${data.users.length} akun dimuat dari database.`);
                 } else {
-                    updateStatusPill(false, "Database Merespons (Kosong)");
-                    setLoadingStatus("Database aktif namun belum ada data pengguna.");
+                    // DB kosong — tetap tampilkan form login/register
+                    setLoadingStatus("Database aktif. Belum ada akun terdaftar.");
                 }
             } catch (e) {
+                dbTerhubung = false;
                 updateStatusPill(false, "Gagal Terhubung ke Database");
-                setLoadingStatus("Koneksi database gagal. Melanjutkan mode lokal.");
+                setLoadingStatus("Tidak dapat terhubung ke database. Mode lokal aktif.");
+                // Fallback: load dari localStorage
+                let stored = localStorage.getItem('pjok_users');
+                if (stored) { presetUsers = JSON.parse(stored); bukaPresetLoginDropdown(); gantiPresetLogin(); }
             }
         }
 
@@ -1388,18 +1433,21 @@
             let subEl = document.getElementById('settings-db-status-sub');
             let syncEl = document.getElementById('db-last-sync');
 
+            let sinkronBtn = document.getElementById('btn-sinkron-manual');
             if (terhubung) {
                 if (pill) { pill.className = "px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[10px] flex items-center gap-1"; pill.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${teks}`; }
                 if (iconEl) iconEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-500"></i>`;
                 if (textEl) textEl.innerText = "Terhubung ke Database";
-                if (subEl) subEl.innerText = "Data akan disinkronisasi otomatis ke Google Sheets.";
+                if (subEl) subEl.innerText = "Data disinkronisasi otomatis ke Google Sheets.";
                 if (syncEl) { syncEl.classList.remove('hidden'); syncEl.innerText = "Terakhir sinkron: " + new Date().toLocaleString('id-ID'); }
+                if (sinkronBtn) sinkronBtn.classList.remove('hidden');
             } else {
                 if (pill) { pill.className = "px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10px] flex items-center gap-1"; pill.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> ${teks}`; }
                 if (iconEl) iconEl.innerHTML = `<i class="fa-solid fa-circle-xmark text-red-400"></i>`;
                 if (textEl) textEl.innerText = teks || "Tidak Terhubung ke Database";
-                if (subEl) subEl.innerText = "Masukkan Web App URL di kolom bawah untuk mengaktifkan.";
+                if (subEl) subEl.innerText = "Masukkan Web App URL di kolom Pengaturan untuk mengaktifkan.";
                 if (syncEl) syncEl.classList.add('hidden');
+                if (sinkronBtn) sinkronBtn.classList.add('hidden');
             }
         }
 
@@ -1434,47 +1482,59 @@
         }
 
         // Tangani pendaftaran akun baru
-        function prosesRegistrasiAkun() {
+        async function prosesRegistrasiAkun() {
             let name = document.getElementById('reg-name').value.trim();
             let email = document.getElementById('reg-email').value.trim();
             let pass = document.getElementById('reg-pass').value.trim();
             let appTitle = document.getElementById('reg-apptitle').value.trim();
 
             if(!name || !email || !pass || !appTitle) {
-                alert("Mohon lengkapi seluruh kolom registrasi wajib!");
-                return;
+                alert("Mohon lengkapi seluruh kolom registrasi wajib!"); return;
             }
 
-            // Periksa apakah email sudah terdaftar
+            // Cek duplikat email (lokal dulu, cepat)
             let exists = presetUsers.some(u => u.email.toLowerCase() === email.toLowerCase());
-            if(exists) {
-                alert("Alamat email ini sudah terdaftar!");
-                return;
-            }
+            if(exists) { alert("Alamat email ini sudah terdaftar!"); return; }
 
             let newUser = {
-                id: "user_" + (presetUsers.length + 1),
-                email: email,
-                pass: pass,
-                name: name,
-                appTitle: appTitle,
-                alamat: "Alamat Sekolah Belum Ditentukan",
-                logoUrl: "https://cdn-icons-png.flaticon.com/512/3135/3135715.png", // Logo bawaan
+                id: "user_" + Date.now(),
+                email: email, pass: pass, name: name, appTitle: appTitle,
+                alamat: "", logoUrl: "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
                 tutWuriUrl: "https://upload.wikimedia.org/wikipedia/commons/9/9c/Logo_Tut_Wuri_Handayani.png"
             };
 
-            presetUsers.push(newUser);
-            localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
+            // Tampilkan loading
+            let btnReg = document.querySelector('[onclick="prosesRegistrasiAkun()"]');
+            if (btnReg) { btnReg.disabled = true; btnReg.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin mr-2"></i> Mendaftarkan...'; }
 
-            // Perbarui daftar preset login dan pilih otomatis
+            // Kirim ke database GAS jika terhubung
+            if (dbTerhubung && getGasUrl()) {
+                let result = await gasPost({ action: 'registerUser', ...newUser });
+                if (result && result.status === 'error') {
+                    if (btnReg) { btnReg.disabled = false; btnReg.innerHTML = '<i class="fa-solid fa-user-plus"></i> Daftar Akun & Masuk'; }
+                    alert("Gagal daftar ke database: " + result.message); return;
+                }
+                // Refresh daftar user dari DB agar sinkron
+                let usersRes = await gasGet({ action: 'getUsers' });
+                if (usersRes && usersRes.status === 'success' && usersRes.users) {
+                    presetUsers = usersRes.users;
+                    localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
+                    // Pastikan user baru ada (DB mungkin update id)
+                    let dbUser = presetUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+                    if (dbUser) newUser = dbUser;
+                }
+            } else {
+                // Mode lokal: simpan hanya di localStorage
+                presetUsers.push(newUser);
+                localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
+            }
+
+            if (btnReg) { btnReg.disabled = false; btnReg.innerHTML = '<i class="fa-solid fa-user-plus"></i> Daftar Akun & Masuk'; }
+
             bukaPresetLoginDropdown();
-            document.getElementById('login-user-select').value = newUser.id;
-            gantiPresetLogin();
-
-            // Tampilkan notifikasi dan langsung masuk aplikasi
             currentUser = newUser;
-            customAlert("Registrasi akun sukses! Selamat datang.");
-            prosesMasukAplikasiDashboard();
+            customAlert("Registrasi akun sukses! Selamat datang, " + name + ".");
+            await prosesMasukAplikasiDashboard();
         }
 
         function bukaPresetLoginDropdown() {
@@ -1502,21 +1562,44 @@
         }
 
         // ================= PROSES MASUK APLIKASI =================
-        function prosesLogin() {
+        async function prosesLogin() {
             let email = document.getElementById('login-email').value.trim();
             let pass = document.getElementById('login-pass').value.trim();
+            if (!email || !pass) { alert("Masukkan email dan kata sandi."); return; }
 
-            let target = presetUsers.find(u => u.email.toLowerCase() === email.toLowerCase() && u.pass === pass);
-            if(target) {
+            let btnLogin = document.querySelector('[onclick="prosesLogin()"]');
+            if (btnLogin) { btnLogin.disabled = true; btnLogin.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin mr-2"></i> Memverifikasi...'; }
+
+            let target = null;
+
+            // Jika database terhubung: verifikasi via GAS (sebagai sumber kebenaran)
+            if (dbTerhubung && getGasUrl()) {
+                try {
+                    // Ambil ulang daftar user terbaru dari DB
+                    let usersRes = await gasGet({ action: 'getUsers' });
+                    if (usersRes && usersRes.status === 'success' && Array.isArray(usersRes.users)) {
+                        presetUsers = usersRes.users;
+                        localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
+                        bukaPresetLoginDropdown();
+                    }
+                } catch(e) { /* fallback ke lokal */ }
+            }
+
+            // Cari user (dari DB yang baru diambil, atau lokal jika offline)
+            target = presetUsers.find(u => u.email.toLowerCase() === email.toLowerCase() && u.pass === pass);
+
+            if (btnLogin) { btnLogin.disabled = false; btnLogin.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Masuk Aplikasi'; }
+
+            if (target) {
                 currentUser = target;
-                prosesMasukAplikasiDashboard();
+                await prosesMasukAplikasiDashboard();
             } else {
-                alert("Email atau kata sandi tidak cocok!");
+                alert("Email atau kata sandi tidak cocok!" + (!dbTerhubung ? "\n(Mode lokal aktif — pastikan akun pernah login di perangkat ini)" : ""));
             }
         }
 
 
-        function prosesMasukAplikasiDashboard() {
+        async function prosesMasukAplikasiDashboard() {
             document.getElementById('sec-login').classList.add('hidden');
             document.getElementById('sec-app-main').classList.remove('hidden');
             document.getElementById('user-profile').classList.remove('hidden');
@@ -1525,14 +1608,19 @@
             document.getElementById('user-display-name').innerText = currentUser.name;
             document.getElementById('user-display-email').innerText = currentUser.email;
 
-            loadUserDataSpesifik();
+            // Muat data (dari DB jika terhubung, lokal jika tidak)
+            await loadUserDataSpesifik();
             updateInstansiAesthetics();
             hitungKalkulasiDashboard();
             gantiTab('dash');
-            // Perbarui status koneksi berdasarkan URL yang sudah tersimpan
-            let savedUrl = localStorage.getItem('pjok_global_gasUrl') || "";
-            if (savedUrl) testKoneksiGAS(true);
-            else updateStatusPill(false, "Tidak Terhubung (Mode Lokal)");
+
+            // Perbarui status koneksi
+            if (dbTerhubung) updateStatusPill(true, "Terhubung ke Database");
+            else {
+                let savedUrl = localStorage.getItem('pjok_global_gasUrl') || "";
+                if (savedUrl) testKoneksiGAS(true);
+                else updateStatusPill(false, "Tidak Terhubung (Mode Lokal)");
+            }
         }
 
         function keluarSistem() {
@@ -1559,101 +1647,148 @@
         }
 
         // ================= MUAT & SIMPAN DATA PER PENGGUNA =================
-        function loadUserDataSpesifik() {
+        async function loadUserDataSpesifik() {
             let uid = currentUser.id;
-            
-            let defaultSiswa = [
-                { id: 1, nama: "Ahmad Firdaus", kelas: "VII-A" },
-                { id: 2, nama: "Bagas Adi Nugroho", kelas: "VII-A" },
-                { id: 3, nama: "Cahya Kamila", kelas: "VII-A" },
-                { id: 4, nama: "Dimas Setiawan", kelas: "VII-A" },
-                { id: 5, nama: "Eka Rahmawati", kelas: "VII-A" }
-            ];
-            dbSiswa = JSON.parse(localStorage.getItem(`pjok_${uid}_siswa`)) || defaultSiswa;
-            
-            dbKelas = JSON.parse(localStorage.getItem(`pjok_${uid}_kelas`)) || ["VII-A"];
+            let email = currentUser.email;
 
-            let defaultTP = [
-                { 
-                    kode: "TP 1", 
-                    materi: "Kebugaran Jasmani - Circuit Training", 
-                    deskripsi: "Menganalisis dan mempraktikkan aktivitas latihan kekuatan, kelenturan, dan daya tahan melalui circuit training dengan benar.",
-                    kktp: [
-                        "Melakukan lari sirkuit tanpa henti di pos 1-5",
-                        "Teknik biomekanika tumpuan kaki teruji baik",
-                        "Mampu menunjukkan kerja sama dan sportivitas tinggi"
-                    ]
-                },
-                { 
-                    kode: "TP 2", 
-                    materi: "Permainan Bola Besar (Sepakbola)", 
-                    deskripsi: "Mempraktikkan variasi dan kombinasi gerak spesifik menendang, menahan, dan menggiring bola permainan sepakbola.",
-                    kktp: [
-                        "Menendang bola dengan kaki bagian dalam tepat sasaran",
-                        "Menghentikan bola secara lengket di lapangan",
-                        "Menggiring bola zig-zag melewati rintangan"
-                    ]
-                },
-                { 
-                    kode: "TP 3", 
-                    materi: "Keterampilan Senam Lantai", 
-                    deskripsi: "Menganalisis dan mempraktikkan rangkaian gerak spesifik guling ke depan (forward roll) dan guling ke belakang dengan aman.",
-                    kktp: [
-                        "Melakukan posisi awalan jongkok secara seimbang",
-                        "Pendaratan punggung aman di atas matras senam",
-                        "Sikap akhir berdiri tegak kembali seimbang"
-                    ]
+            // Jika database terhubung: ambil data dari GAS (sumber kebenaran utama)
+            if (dbTerhubung && getGasUrl()) {
+                try {
+                    setLoadingStatus("Memuat data dari database...");
+                    let res = await gasGet({ action: 'getUserData', email: email });
+                    if (res && res.status === 'success') {
+                        // Parse data dari GAS ke format internal
+                        dbSiswa     = parseSiswaFromGAS(res.siswa || []);
+                        dbKelas     = parseKelasFromGAS(res.kelas || []);
+                        dbTP        = parseTPFromGAS(res.tp || []);
+                        dbPenilaian = parsePenilaianFromGAS(res.penilaian || []);
+                        dbPresensi  = parsePresensiFromGAS(res.presensi || []);
+                        dbRTL       = parseRTLFromGAS(res.rtl || []);
+                        // Cache ke lokal sebagai backup offline
+                        simpanSemuaKeLokal();
+                        setLoadingStatus("Data berhasil dimuat dari database.");
+                    } else {
+                        throw new Error("response error");
+                    }
+                } catch(e) {
+                    // Fallback ke lokal jika gagal ambil data
+                    muat_dari_lokal(uid);
                 }
-            ];
-            dbTP = JSON.parse(localStorage.getItem(`pjok_${uid}_tp`)) || defaultTP;
-
-            let defaultPenilaian = [
-                { siswaId: 1, nama: "Ahmad Firdaus", kelas: "VII-A", tpKode: "TP 1", tipeAsesmen: "Formatif", teknikPenilaian: "Observasi", instrumenAsesmen: "Rubrik", skor: 3, catatan: "Teknik sirkuit stabil", fotoUrl: "", timestamp: "18/05/2026 08:30" },
-                { siswaId: 1, nama: "Ahmad Firdaus", kelas: "VII-A", tpKode: "TP 1", tipeAsesmen: "Formatif", teknikPenilaian: "Kinerja", instrumenAsesmen: "Catatan Anekdotal", skor: 4, catatan: "Peningkatan kelincahan signifikan", fotoUrl: "", timestamp: "18/05/2026 08:45" },
-                { siswaId: 1, nama: "Ahmad Firdaus", kelas: "VII-A", tpKode: "TP 1", tipeAsesmen: "Sumatif", teknikPenilaian: "Kinerja", instrumenAsesmen: "Rubrik", skor: 4, catatan: "Sangat menguasai teknik latihan sirkuit", fotoUrl: "", timestamp: "18/05/2026 09:00" },
-                { siswaId: 2, nama: "Bagas Adi Nugroho", kelas: "VII-A", tpKode: "TP 1", tipeAsesmen: "Formatif", teknikPenilaian: "Observasi", instrumenAsesmen: "Rubrik", skor: 2, catatan: "Kekuatan lengan kurang", fotoUrl: "", timestamp: "18/05/2026 08:31" },
-                { siswaId: 2, nama: "Bagas Adi Nugroho", kelas: "VII-A", tpKode: "TP 1", tipeAsesmen: "Sumatif", teknikPenilaian: "Kinerja", instrumenAsesmen: "Rubrik", skor: 2, catatan: "Butuh penguatan kekuatan tumpuan", fotoUrl: "", timestamp: "18/05/2026 09:01" },
-                { siswaId: 3, nama: "Cahya Kamila", kelas: "VII-A", tpKode: "TP 1", tipeAsesmen: "Sumatif", teknikPenilaian: "Kinerja", instrumenAsesmen: "Rubrik", skor: 3, catatan: "Capaian baik pada circuit training", fotoUrl: "", timestamp: "18/05/2026 09:02" },
-                { siswaId: 4, nama: "Dimas Setiawan", kelas: "VII-A", tpKode: "TP 1", tipeAsesmen: "Sumatif", teknikPenilaian: "Kinerja", instrumenAsesmen: "Rubrik", skor: 4, catatan: "Sangat prima melakukan sirkuit", fotoUrl: "", timestamp: "18/05/2026 09:03" },
-                { siswaId: 5, nama: "Eka Rahmawati", kelas: "VII-A", tpKode: "TP 1", tipeAsesmen: "Sumatif", teknikPenilaian: "Kinerja", instrumenAsesmen: "Rubrik", skor: 2, catatan: "Butuh bimbingan", fotoUrl: "", timestamp: "18/05/2026 09:04" }
-            ];
-            dbPenilaian = JSON.parse(localStorage.getItem(`pjok_${uid}_penilaian`)) || defaultPenilaian;
-
-            dbPresensi = JSON.parse(localStorage.getItem(`pjok_${uid}_presensi`)) || [];
-
-            dbRTL = JSON.parse(localStorage.getItem(`pjok_${uid}_rtl`)) || [
-                { id: 1, siswaId: 5, nama: "Eka Rahmawati", kelas: "VII-A", tpKode: "TP 1", tipeRtl: "Remedial", bentukRtl: "Bimbingan teknik tumpuan", tanggal: "2026-05-19", status: "Proses", hasil: "Siswa menunjukkan peningkatan" }
-            ];
-
-            let gasUrlEl = document.getElementById('api-gas-url');
-            if (gasUrlEl) {
-                // ▼▼▼ PASTE WEB APP URL ANDA DI SINI (ganti string kosong di bawah) ▼▼▼
-                const HARDCODED_GAS_URL = "";
-                // ▲▲▲ CONTOH: const HARDCODED_GAS_URL = "https://script.google.com/macros/s/ABC123.../exec"; ▲▲▲
-                let savedGlobal = HARDCODED_GAS_URL || localStorage.getItem('pjok_global_gasUrl') || "";
-                let savedUser = localStorage.getItem(`pjok_${uid}_gasUrl`) || "";
-                let finalUrl = savedUser || savedGlobal;
-                gasUrlEl.value = finalUrl;
-                // Simpan ke global agar loading screen bisa pakai
-                if (finalUrl) localStorage.setItem('pjok_global_gasUrl', finalUrl);
+            } else {
+                // Mode lokal: baca dari localStorage
+                muat_dari_lokal(uid);
             }
 
-            simpanSemuaKeLokal();
             muatKonfigurasiAwalDropdown();
             renderListKelasSetup();
             renderPreviewSiswaSetup();
             renderBankTPList();
         }
 
+        function muat_dari_lokal(uid) {
+            dbSiswa     = JSON.parse(localStorage.getItem(`pjok_${uid}_siswa`))     || [];
+            dbKelas     = JSON.parse(localStorage.getItem(`pjok_${uid}_kelas`))     || [];
+            dbTP        = JSON.parse(localStorage.getItem(`pjok_${uid}_tp`))        || [];
+            dbPenilaian = JSON.parse(localStorage.getItem(`pjok_${uid}_penilaian`)) || [];
+            dbPresensi  = JSON.parse(localStorage.getItem(`pjok_${uid}_presensi`))  || [];
+            dbRTL       = JSON.parse(localStorage.getItem(`pjok_${uid}_rtl`))       || [];
+        }
+
+        // ===== Parser: konversi row GAS → format objek internal =====
+        function parseSiswaFromGAS(rows) {
+            return rows.map(r => ({
+                id: parseInt(r["ID Siswa"]) || r["ID Siswa"],
+                nama: r["Nama Siswa"] || "",
+                kelas: r["Kelas"] || ""
+            })).filter(s => s.nama);
+        }
+        function parseKelasFromGAS(rows) {
+            return [...new Set(rows.map(r => r["Nama Kelas"] || "").filter(Boolean))];
+        }
+        function parseTPFromGAS(rows) {
+            return rows.map(r => {
+                let indikatorRubrik = [];
+                try { indikatorRubrik = JSON.parse(r["Indikator Rubrik JSON"] || "[]"); } catch(e) {}
+                return {
+                    kode: r["Kode TP"] || "",
+                    materi: r["Materi Pokok"] || "",
+                    deskripsi: r["Deskripsi Kompetensi"] || "",
+                    kktp: (r["KKTP Lama (pisahkan |)"] || "").split("|").filter(Boolean),
+                    indikatorRubrik: indikatorRubrik
+                };
+            }).filter(t => t.kode);
+        }
+        function parsePenilaianFromGAS(rows) {
+            return rows.map(r => ({
+                siswaId: parseInt(r["ID Siswa"]) || r["ID Siswa"],
+                nama: r["Nama Siswa"] || "",
+                kelas: r["Kelas"] || "",
+                tpKode: r["Kode TP"] || "",
+                tipeAsesmen: r["Tipe Asesmen"] || "",
+                teknikPenilaian: r["Teknik Penilaian"] || "",
+                instrumenAsesmen: r["Instrumen Asesmen"] || "",
+                skor: parseFloat(r["Skor"]) || 0,
+                catatan: r["Catatan Lapangan"] || "",
+                fotoUrl: r["URL Foto"] || "",
+                timestamp: r["Timestamp"] || ""
+            })).filter(p => p.siswaId);
+        }
+        function parsePresensiFromGAS(rows) {
+            return rows.map(r => ({
+                siswaId: parseInt(r["ID Siswa"]) || r["ID Siswa"],
+                nama: r["Nama Siswa"] || "",
+                kelas: r["Kelas"] || "",
+                tanggal: r["Tanggal Sesi"] || "",
+                statusPresensi: r["Status Kehadiran"] || "Hadir",
+                catatan: r["Catatan"] || "",
+                userEmail: r["Email Guru"] || ""
+            })).filter(p => p.siswaId);
+        }
+        function parseRTLFromGAS(rows) {
+            return rows.map((r, i) => ({
+                id: i + 1,
+                siswaId: parseInt(r["ID Siswa"]) || r["ID Siswa"],
+                nama: r["Nama Siswa"] || "",
+                kelas: r["Kelas"] || "",
+                tpKode: r["Kode TP"] || "",
+                tipeRtl: r["Tipe RTL"] || "",
+                bentukRtl: r["Bentuk RTL"] || "",
+                tanggal: r["Tanggal Eksekusi"] || "",
+                status: r["Status"] || "",
+                hasil: r["Hasil Akhir"] || ""
+            })).filter(r => r.siswaId);
+        }
+
         function simpanSemuaKeLokal() {
             if(!currentUser) return;
             let uid = currentUser.id;
-            localStorage.setItem(`pjok_${uid}_siswa`, JSON.stringify(dbSiswa));
-            localStorage.setItem(`pjok_${uid}_kelas`, JSON.stringify(dbKelas));
-            localStorage.setItem(`pjok_${uid}_tp`, JSON.stringify(dbTP));
+            localStorage.setItem(`pjok_${uid}_siswa`,     JSON.stringify(dbSiswa));
+            localStorage.setItem(`pjok_${uid}_kelas`,     JSON.stringify(dbKelas));
+            localStorage.setItem(`pjok_${uid}_tp`,        JSON.stringify(dbTP));
             localStorage.setItem(`pjok_${uid}_penilaian`, JSON.stringify(dbPenilaian));
-            localStorage.setItem(`pjok_${uid}_presensi`, JSON.stringify(dbPresensi));
-            localStorage.setItem(`pjok_${uid}_rtl`, JSON.stringify(dbRTL));
+            localStorage.setItem(`pjok_${uid}_presensi`,  JSON.stringify(dbPresensi));
+            localStorage.setItem(`pjok_${uid}_rtl`,       JSON.stringify(dbRTL));
+        }
+
+        // Sinkron semua data user ke DB GAS (dipanggil setelah perubahan besar)
+        async function sinkronDataKeDB() {
+            if (!dbTerhubung || !getGasUrl() || !currentUser) return;
+            try {
+                let result = await gasPost({
+                    action: 'syncUserData',
+                    email: currentUser.email,
+                    siswa: dbSiswa,
+                    kelas: dbKelas.map(k => ({ namaKelas: k })),
+                    tp: dbTP,
+                    penilaian: dbPenilaian,
+                    presensi: dbPresensi,
+                    rtl: dbRTL
+                });
+                if (result && result.status === 'success') {
+                    let syncEl = document.getElementById('db-last-sync');
+                    if (syncEl) { syncEl.classList.remove('hidden'); syncEl.innerText = "Terakhir sinkron: " + new Date().toLocaleString('id-ID'); }
+                }
+            } catch(e) { /* sinkron gagal, data masih tersimpan lokal */ }
         }
 
         // ================= PENGONTROL TAB NAVIGASI UTAMA =================
@@ -1781,11 +1916,12 @@
             if(counter > 0) {
                 document.getElementById('import-siswa-raw').value = "";
                 simpanSemuaKeLokal();
+                sinkronDataKeDB();
                 renderPreviewSiswaSetup();
                 hitungKalkulasiDashboard();
                 sinkronisasiDropdownSiswaRTL();
                 sinkronisasiPresensiSiswa();
-                customAlert(`Berhasil mengimpor ${counter} siswa ke kelas ${kelas}!`);
+                customAlert(`Berhasil mengimpor ${counter} siswa ke kelas ${kelas}!` + (dbTerhubung ? " ☁️" : ""));
             }
         }
 
@@ -1856,6 +1992,7 @@
                 
                 resetFormTP();
                 simpanSemuaKeLokal();
+                sinkronDataKeDB();
                 renderBankTPList();
                 sinkronisasiDropdownTP();
                 hitungKalkulasiDashboard();
@@ -2022,6 +2159,7 @@
             let catatan = noteEl ? noteEl.value : "";
 
             let payload = {
+                action: 'simpanPresensi',
                 siswaId: siswaId,
                 nama: targetS.nama,
                 kelas: kelas,
@@ -3014,7 +3152,7 @@
         }
 
         // ================= SETTINGS / CONFIGURATION =================
-        function simpanPengaturanProfil() {
+        async function simpanPengaturanProfil() {
             let name = document.getElementById('set-teacher-name').value.trim();
             let pass = document.getElementById('set-teacher-password').value.trim();
             let logo = document.getElementById('set-app-logo').value.trim();
@@ -3030,14 +3168,20 @@
                 currentUser.appTitle = title;
                 currentUser.alamat = alamat;
 
+                // Simpan ke lokal
                 let idx = presetUsers.findIndex(u => u.id === currentUser.id);
                 if(idx > -1) {
                     presetUsers[idx] = currentUser;
                     localStorage.setItem('pjok_users', JSON.stringify(presetUsers));
                 }
 
+                // Update profil ke DB jika terhubung
+                if (dbTerhubung && getGasUrl()) {
+                    await gasPost({ action: 'updateUser', ...currentUser });
+                }
+
                 updateInstansiAesthetics();
-                customAlert("Sistem Berhasil Diperbarui!");
+                customAlert("Profil berhasil diperbarui!" + (dbTerhubung ? " (tersimpan di database)" : " (tersimpan lokal)"));
             } else {
                 alert("Mohon lengkapi isian Nama, Sandi, dan Judul Instansi.");
             }
@@ -3093,23 +3237,17 @@
                 });
         }
 
+        // Kirim satu payload real-time ke GAS (penilaian, presensi, RTL individual)
         function kirimDataLokalKeGoogleSheets(payload) {
-            let urlEl = document.getElementById('api-gas-url');
-            let url = urlEl ? urlEl.value.trim() : "";
-            if(!url) return;
-
-            fetch(url, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-            .then(() => {
-                console.log("Autosave Cloud Sukses.");
-            })
-            .catch(err => {
-                console.warn("Autosave gagal: ", err);
-            });
+            if (!dbTerhubung || !getGasUrl()) return;
+            // Pastikan action ada di payload
+            if (!payload.action) return;
+            gasPost(payload).then(res => {
+                if (res && res.status === 'success') {
+                    let syncEl = document.getElementById('db-last-sync');
+                    if (syncEl) { syncEl.classList.remove('hidden'); syncEl.innerText = "Terakhir sinkron: " + new Date().toLocaleString('id-ID'); }
+                }
+            }).catch(() => {});
         }
 
         function customAlert(pesan) {
@@ -3174,6 +3312,20 @@
             document.getElementById('rtl-tipe').value = tipe;
             document.getElementById('rtl-tanggal').value = new Date().toISOString().substring(0, 10);
             document.getElementById('rtl-bentuk').focus();
+        }
+
+        // ================= SINKRON MANUAL =================
+        async function sinkronManual() {
+            if (!dbTerhubung || !getGasUrl()) {
+                alert("Database belum terhubung. Hubungkan dulu di menu Pengaturan.");
+                return;
+            }
+            let btn = document.getElementById('btn-sinkron-manual');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin"></i>'; }
+            customAlert("Menyinkronkan data ke database...");
+            await sinkronDataKeDB();
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-rotate"></i> <span class="hidden sm:inline">Sinkron</span>'; }
+            customAlert("✓ Sinkronisasi berhasil!");
         }
 
         // ================= TEMA WARNA & FONT =================
