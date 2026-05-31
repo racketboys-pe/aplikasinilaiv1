@@ -37,10 +37,8 @@ var SUPABASE_CONFIG = {
  */
 function setupSupabase() {
   var props = PropertiesService.getScriptProperties();
-  // ▼▼▼ GANTI DENGAN NILAI DARI SUPABASE DASHBOARD ▼▼▼
   props.setProperty("SUPABASE_URL",         "https://gauxdtoomtpffkgynltg.supabase.co");
   props.setProperty("SUPABASE_SERVICE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdhdXhkdG9vbXRwZmZrZ3lubHRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNjg1MjQsImV4cCI6MjA5NTc0NDUyNH0.rjHFnWmXSFetCKHpDRObXioXn6jIcEMCD_dlIwGHVSM");
-  // ▲▲▲ SETELAH DIJALANKAN, HAPUS NILAI DI ATAS ▲▲▲
   Logger.log("Supabase config tersimpan di Properties ✓");
 }
 
